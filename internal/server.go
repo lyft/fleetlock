@@ -79,7 +79,7 @@ func NewServer(config *Config) (http.Handler, error) {
 
 	mux := http.NewServeMux()
 	chain := func(next http.Handler) http.Handler {
-		return POSTHandler(HeaderHandler(fleetLockHeaderKey, "true", next))
+		return InstrumentedHandler(s.metrics.totalRequests, s.metrics.responseStatus, s.metrics.httpDuration, POSTHandler(HeaderHandler(fleetLockHeaderKey, "true", next)))
 	}
 	mux.Handle("/v1/pre-reboot", chain(http.HandlerFunc(s.lock)))
 	mux.Handle("/v1/steady-state", chain(http.HandlerFunc(s.unlock)))
