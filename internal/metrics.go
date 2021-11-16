@@ -41,12 +41,12 @@ func newMetrics() *metrics {
 		Help: "Number of requests",
 	}, []string{"path"})
 	responseStatus := prometheus.NewCounterVec(prometheus.CounterOpts{
-		Name: "http_response_status",
+		Name: "http_response_status_total",
 		Help: "Status of HTTP response",
 	}, []string{"path", "status"})
 	httpDuration := prometheus.NewHistogramVec(prometheus.HistogramOpts{
-		Name:    "http_response_time_millis",
-		Help:    "Duration of HTTP requests in milliseconds",
+		Name:    "http_response_time_seconds",
+		Help:    "Duration of HTTP requests in seconds",
 		Buckets: prometheus.ExponentialBuckets(10e-9, 10, 10),
 	}, []string{"path"})
 

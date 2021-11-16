@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"strconv"
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/collectors"
@@ -19,6 +20,23 @@ import (
 type Config struct {
 	// logger
 	Logger *logrus.Logger
+}
+
+// Wrapper around http.ResponseWriter
+type responseWriter struct {
+	http.ResponseWriter
+	statusCode int
+}
+
+// Makes a responseWriter
+func newResponseWriter(w http.ResponseWriter) *responseWriter {
+	return &responseWriter{w, http.StatusOK}
+}
+
+// Writes the header code into the response and makes it available for logging
+func (rw *responseWriter) WriteHeader(code int) {
+	rw.statusCode = code
+	rw.ResponseWriter.WriteHeader(code)
 }
 
 // Server implements the FleetLock protocol.
@@ -79,13 +97,31 @@ func NewServer(config *Config) (http.Handler, error) {
 
 	mux := http.NewServeMux()
 	chain := func(next http.Handler) http.Handler {
-		return InstrumentedHandler(s.metrics.totalRequests, s.metrics.responseStatus, s.metrics.httpDuration, POSTHandler(HeaderHandler(fleetLockHeaderKey, "true", next)))
+		return s.instrumentedHandler(POSTHandler(HeaderHandler(fleetLockHeaderKey, "true", next)))
 	}
 	mux.Handle("/v1/pre-reboot", chain(http.HandlerFunc(s.lock)))
 	mux.Handle("/v1/steady-state", chain(http.HandlerFunc(s.unlock)))
 	mux.Handle("/metrics", promhttp.HandlerFor(registry, promhttp.HandlerOpts{}))
 	mux.Handle("/-/healthy", healthHandler())
 	return mux, nil
+}
+
+// InstrumentedHandler returns a handler that instruments http requests
+func (s *Server) instrumentedHandler(next http.Handler) http.Handler {
+	fn := func(w http.ResponseWriter, req *http.Request) {
+		path := req.URL.Path
+		timer := prometheus.NewTimer(s.metrics.httpDuration.WithLabelValues(path))
+		defer timer.ObserveDuration()
+		rw := newResponseWriter(w)
+		next.ServeHTTP(rw, req)
+
+		s.metrics.responseStatus.With(prometheus.Labels{
+			"path":   path,
+			"status": strconv.Itoa(rw.statusCode),
+		}).Inc()
+		s.metrics.totalRequests.WithLabelValues(path).Inc()
+	}
+	return http.HandlerFunc(fn)
 }
 
 // newRebootLease creates a reboot lease.
