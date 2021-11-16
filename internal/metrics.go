@@ -10,6 +10,9 @@ type metrics struct {
 	lockTransitions *prometheus.GaugeVec
 	lockRequests    prometheus.Counter
 	unlockRequests  prometheus.Counter
+	totalRequests   *prometheus.CounterVec
+	responseStatus  *prometheus.CounterVec
+	httpDuration    *prometheus.HistogramVec
 }
 
 // newMetrics creates fleetlock Prometheus metrics.
@@ -33,12 +36,28 @@ func newMetrics() *metrics {
 		Name: "fleetlock_unlock_request_count",
 		Help: "Number of unlock requests",
 	})
+	totalRequests := prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: "http_requests_total",
+		Help: "Number of requests",
+	}, []string{"path"})
+	responseStatus := prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: "http_response_status_total",
+		Help: "Status of HTTP response",
+	}, []string{"path", "status"})
+	httpDuration := prometheus.NewHistogramVec(prometheus.HistogramOpts{
+		Name:    "http_response_time_seconds",
+		Help:    "Duration of HTTP requests in seconds",
+		Buckets: prometheus.ExponentialBuckets(10e-9, 10, 10),
+	}, []string{"path"})
 
 	return &metrics{
 		lockState:       lockState,
 		lockTransitions: lockTransitions,
 		lockRequests:    lockRequests,
 		unlockRequests:  unlockRequests,
+		totalRequests:   totalRequests,
+		responseStatus:  responseStatus,
+		httpDuration:    httpDuration,
 	}
 }
 
@@ -49,6 +68,9 @@ func (m *metrics) Register(registry prometheus.Registerer) error {
 		m.lockTransitions,
 		m.lockRequests,
 		m.unlockRequests,
+		m.totalRequests,
+		m.responseStatus,
+		m.httpDuration,
 	}
 
 	return registerAll(registry, collectors...)
