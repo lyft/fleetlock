@@ -9,8 +9,9 @@ import (
 // Message represents a FleetLock protocol client request.
 type Message struct {
 	ClientParmas struct {
-		ID    string `json:"id"`
-		Group string `json:"group"`
+		ID          string `json:"id"`
+		Group       string `json:"group"`
+		SkipNodeOps bool   `json:"skip_node_ops"`
 	} `json:"client_params"`
 }
 

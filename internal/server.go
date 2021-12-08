@@ -110,11 +110,13 @@ func (s *Server) lock(w http.ResponseWriter, req *http.Request) {
 	}
 	id := msg.ClientParmas.ID
 	group := msg.ClientParmas.Group
+	skipNodeOps := msg.ClientParmas.SkipNodeOps
 	rebootLease := s.newRebootLease(group)
 
 	fields := logrus.Fields{
-		"id":    id,
-		"group": group,
+		"id":            id,
+		"group":         group,
+		"skip_node_ops": skipNodeOps,
 	}
 
 	s.log.WithFields(fields).Info("fleetlock: attempt reboot lease lock")
@@ -139,7 +141,9 @@ func (s *Server) lock(w http.ResponseWriter, req *http.Request) {
 		fmt.Fprint(w, "retained reboot lease")
 
 		// best effort, do not gate on drain succeeding
-		_ = s.DrainNode(ctx, id)
+		if !skipNodeOps {
+			_ = s.DrainNode(ctx, id)
+		}
 		return
 	}
 
@@ -158,7 +162,9 @@ func (s *Server) lock(w http.ResponseWriter, req *http.Request) {
 			fmt.Fprintf(w, "obtained reboot lease")
 
 			// best effort, do not gate on drain succeeding
-			_ = s.DrainNode(ctx, id)
+			if !skipNodeOps {
+				_ = s.DrainNode(ctx, id)
+			}
 			return
 		}
 		s.log.WithFields(fields).Errorf("fleetlock: error obtaining reboot lease: %v", err)
@@ -180,11 +186,13 @@ func (s *Server) unlock(w http.ResponseWriter, req *http.Request) {
 	}
 	id := msg.ClientParmas.ID
 	group := msg.ClientParmas.Group
+	skipNodeOps := msg.ClientParmas.SkipNodeOps
 	rebootLease := s.newRebootLease(group)
 
 	fields := logrus.Fields{
-		"id":    id,
-		"group": group,
+		"id":            id,
+		"group":         group,
+		"skip_node_ops": skipNodeOps,
 	}
 
 	s.log.WithFields(fields).Info("fleetlock: attempt reboot lease unlock")
@@ -203,11 +211,13 @@ func (s *Server) unlock(w http.ResponseWriter, req *http.Request) {
 
 	// reboot lease is owned by node
 	if lock.Holder == id {
-		err := s.UncordonNode(ctx, id)
-		if err != nil {
-			s.log.Errorf("fleetlock: error uncordoning node: %v", err)
-			encodeReply(w, NewReply(KindInternalError, "error uncordoning node"))
-			return
+		if !skipNodeOps {
+			err := s.UncordonNode(ctx, id)
+			if err != nil {
+				s.log.Errorf("fleetlock: error uncordoning node: %v", err)
+				encodeReply(w, NewReply(KindInternalError, "error uncordoning node"))
+				return
+			}
 		}
 
 		// release reboot lease lock
